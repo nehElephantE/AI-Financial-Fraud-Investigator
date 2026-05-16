@@ -11,44 +11,37 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements files
+# Copy requirements
+COPY phase3_rag/requirements.txt phase3_rag/
 COPY phase1_ingestion/requirements.txt phase1_ingestion/
 COPY phase2_models/requirements.txt phase2_models/
-COPY phase3_rag/requirements.txt phase3_rag/
 
-# Install all requirements
+# Install requirements
+RUN pip install --no-cache-dir -r phase3_rag/requirements.txt
 RUN pip install --no-cache-dir -r phase1_ingestion/requirements.txt
 RUN pip install --no-cache-dir -r phase2_models/requirements.txt
-RUN pip install --no-cache-dir -r phase3_rag/requirements.txt
 
-# Copy all code
+# Copy code
 COPY . .
 
 # Set environment variables
 ENV USE_LOCAL_LLM=false
-ENV DB_HOST=mysql
+ENV DB_HOST=${DB_HOST}
 ENV DB_PORT=3306
 ENV DB_NAME=fraud_db
-ENV DB_USER=fraud_user
-ENV DB_PASSWORD=fraud123
+ENV DB_USER=${DB_USER}
+ENV DB_PASSWORD=${DB_PASSWORD}
 
 # Expose ports
 EXPOSE 8002
 EXPOSE 8501
 
-# Create startup script
+# Start both services
 RUN echo '#!/bin/bash\n\
-echo "=== Starting Fraud Detection System ==="\n\
-echo "Step 1: Generating and loading data..."\n\
-cd /app/phase1_ingestion && python generate_transactions.py && python load_to_db.py\n\
-echo "Step 2: Training models..."\n\
-cd /app/phase2_models && python feature_engineering.py && python train_xgboost.py\n\
-echo "Step 3: Building vector store..."\n\
-cd /app/phase3_rag && python fraud_cases_loader.py\n\
-echo "Step 4: Starting API server..."\n\
+cd /app && \\\n\
+# Start API in background\n\
 cd /app/phase3_rag && python fast_api.py &\n\
-API_PID=$!\n\
-echo "Step 5: Starting UI..."\n\
+# Start UI\n\
 cd /app/phase3_rag && streamlit run chat_ui.py --server.port=8501 --server.address=0.0.0.0\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
