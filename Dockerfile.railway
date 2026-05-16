@@ -1,0 +1,52 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    default-libmysqlclient-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements files
+COPY phase1_ingestion/requirements.txt phase1_ingestion/requirements.txt
+COPY phase2_models/requirements.txt phase2_models/requirements.txt
+COPY phase3_rag/requirements.txt phase3_rag/requirements.txt
+
+# Install all requirements
+RUN pip install --no-cache-dir -r phase1_ingestion/requirements.txt
+RUN pip install --no-cache-dir -r phase2_models/requirements.txt
+RUN pip install --no-cache-dir -r phase3_rag/requirements.txt
+
+# Copy all code
+COPY . .
+
+# Set environment variables
+ENV USE_LOCAL_LLM=false
+ENV DB_HOST=mysql
+ENV DB_PORT=3306
+ENV DB_NAME=fraud_db
+ENV DB_USER=fraud_user
+ENV DB_PASSWORD=fraud123
+
+# Expose ports
+EXPOSE 8002
+EXPOSE 8501
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+# Start MySQL (Railway provides MySQL separately)\n\
+# Run data generation and model training\n\
+cd /app/phase1_ingestion && python generate_transactions.py && python load_to_db.py\n\
+cd /app/phase2_models && python feature_engineering.py && python train_xgboost.py\n\
+cd /app/phase3_rag && python fraud_cases_loader.py\n\
+# Start API in background\n\
+cd /app/phase3_rag && python fast_api.py &\n\
+# Start UI\n\
+cd /app/phase3_rag && streamlit run chat_ui.py --server.port=8501 --server.address=0.0.0.0\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]

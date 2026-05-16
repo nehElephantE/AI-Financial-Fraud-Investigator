@@ -1,0 +1,27 @@
+# Core ML & RAG
+chromadb==0.5.0
+sentence-transformers==2.2.2
+langchain==0.3.0
+langchain-community==0.3.0
+langchain-core==0.3.0
+
+# API & Utils
+fastapi==0.115.0
+uvicorn==0.32.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+streamlit==1.38.0
+python-dotenv==1.0.0
+requests==2.31.0
+
+# Data processing
+pandas==2.2.0
+numpy==1.26.3
+mysql-connector-python==8.3.0
+tqdm==4.66.0
+
+# Caching
+diskcache==5.6.3
+
+# For local LLM (optional)
+llama-cpp-python==0.2.90

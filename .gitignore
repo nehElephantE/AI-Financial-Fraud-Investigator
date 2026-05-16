@@ -1,0 +1,32 @@
+@"
+# Large model files (downloaded during build)
+*.gguf
+*.pth
+*.bin
+
+# Cache directories
+*/llm_cache/
+*/transaction_cache/
+*/chroma_db/
+
+# AWS keys
+*.pem
+*.ppk
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Data files (can regenerate)
+*.csv
+*.tar.gz
+*.db
+
+# IDE
+.vscode/
+.idea/
+"@ | Out-File -FilePath .gitignore -Encoding utf8

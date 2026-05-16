@@ -1,0 +1,130 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: fraud_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: fraud_db
+      MYSQL_USER: fraud_user
+      MYSQL_PASSWORD: fraud123
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./phase1_ingestion/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fraud_network
+
+  data-loader:
+    build:
+      context: ./phase1_ingestion
+      dockerfile: Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: fraud_db
+      DB_USER: fraud_user
+      DB_PASSWORD: fraud123
+    command: sh -c "python generate_transactions.py && python load_to_db.py"
+    networks:
+      - fraud_network
+
+  model-trainer:
+    build:
+      context: ./phase2_models
+      dockerfile: Dockerfile
+    depends_on:
+      data-loader:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: fraud_db
+      DB_USER: fraud_user
+      DB_PASSWORD: fraud123
+    volumes:
+      - model_data:/app/models
+    command: sh -c "python feature_engineering.py && python train_xgboost.py"
+    networks:
+      - fraud_network
+
+  vector-builder:
+    build:
+      context: ./phase3_rag
+      dockerfile: Dockerfile
+    depends_on:
+      model-trainer:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: fraud_db
+      DB_USER: fraud_user
+      DB_PASSWORD: fraud123
+      USE_LOCAL_LLM: "false"
+    volumes:
+      - vector_data:/app/chroma_db
+    command: python fraud_cases_loader.py
+    networks:
+      - fraud_network
+
+  api:
+    build:
+      context: ./phase3_rag
+      dockerfile: Dockerfile.api
+    depends_on:
+      mysql:
+        condition: service_healthy
+      vector-builder:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: fraud_db
+      DB_USER: fraud_user
+      DB_PASSWORD: fraud123
+      USE_LOCAL_LLM: "false"
+    ports:
+      - "8002:8002"
+    volumes:
+      - model_data:/app/models
+      - vector_data:/app/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - fraud_network
+
+  ui:
+    build:
+      context: ./phase3_rag
+      dockerfile: Dockerfile.ui
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: http://api:8002
+    ports:
+      - "8501:8501"
+    networks:
+      - fraud_network
+
+networks:
+  fraud_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  model_data:
+  vector_data:
